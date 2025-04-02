@@ -49,7 +49,7 @@ def add_grade():
         grades[student_id][subject] = []
     grades[student_id][subject].append(grade)
 
-    action = ('add', grade, "timestamp_placeholder")
+    action = ('add', grade, "timestamp_placeholder")  # Timestamp can be added here
     if student_id not in history:
         history[student_id] = {}
     if subject not in history[student_id]:
@@ -100,6 +100,33 @@ def delete_grade():
         history[student_id][subject].append(action)
 
     return redirect(url_for('teacher_dashboard'))
+
+
+@app.route('/teacher/upload_bulk_grades', methods=['POST'])
+def upload_bulk_grades():
+    file = request.files['file']
+    if file:
+        # Assuming file is a CSV of student_id, subject, grade
+        import csv
+        reader = csv.reader(file)
+        for row in reader:
+            student_id, subject, grade = row
+            grade = float(grade)
+            if validate_grade(grade):
+                if student_id not in grades:
+                    grades[student_id] = {}
+                if subject not in grades[student_id]:
+                    grades[student_id][subject] = []
+                grades[student_id][subject].append(grade)
+
+                action = ('add', grade, "timestamp_placeholder")
+                if student_id not in history:
+                    history[student_id] = {}
+                if subject not in history[student_id]:
+                    history[student_id][subject] = []
+                history[student_id][subject].append(action)
+
+        return redirect(url_for('teacher_dashboard'))
 
 if __name__ == '__main__':
     app.run(debug=True)
