@@ -28,7 +28,7 @@ def login():
         return "Invalid email domain. Please use a valid student or teacher email."
 
 
-# Teacher Panel
+
 @app.route('/teacher')
 def teacher_dashboard():
     return render_template('teacher.html', grades=grades, students=students)
@@ -127,6 +127,43 @@ def upload_bulk_grades():
                 history[student_id][subject].append(action)
 
         return redirect(url_for('teacher_dashboard'))
+
+
+@app.route('/teacher/add_student', methods=['POST'])
+def add_student():
+    student_id = request.form.get('student_id')
+    name = request.form.get('name')
+    email = request.form.get('email')
+    classes = request.form.getlist('classes')  # list of class names
+
+    students[student_id] = {'name': name, 'email': email, 'classes': classes}
+    for class_name in classes:
+        if class_name not in class_students:
+            class_students[class_name] = []
+        class_students[class_name].append(student_id)
+
+    return redirect(url_for('teacher_dashboard'))
+
+
+@app.route('/teacher/remove_student', methods=['POST'])
+def remove_student():
+    student_id = request.form.get('student_id')
+    classes = students.get(student_id, {}).get('classes', [])
+
+    for class_name in classes:
+        if class_name in class_students and student_id in class_students[class_name]:
+            class_students[class_name].remove(student_id)
+
+    students.pop(student_id, None)
+
+    return redirect(url_for('teacher_dashboard'))
+
+
+@app.route('/student/<student_id>')
+def student_dashboard(student_id):
+    student_grades = grades.get(student_id, {})
+    return render_template('student.html', student_id=student_id, student_grades=student_grades)
+
 
 if __name__ == '__main__':
     app.run(debug=True)
