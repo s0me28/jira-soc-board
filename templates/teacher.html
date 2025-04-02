@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teacher Panel</title>
+</head>
+<body>
+    <h2>Welcome, Teacher</h2>
+
+    <h3>Add Grade</h3>
+    <form action="/teacher/add_grade" method="POST">
+        <input type="text" name="student_id" placeholder="Student ID" required>
+        <input type="text" name="subject" placeholder="Subject" required>
+        <input type="number" name="grade" placeholder="Grade" required>
+        <button type="submit">Add Grade</button>
+    </form>
+
+    <h3>Edit Grade</h3>
+    <form action="/teacher/edit_grade" method="POST">
+        <input type="text" name="student_id" placeholder="Student ID" required>
+        <input type="text" name="subject" placeholder="Subject" required>
+        <input type="number" name="old_grade" placeholder="Old Grade" required>
+        <input type="number" name="new_grade" placeholder="New Grade" required>
+        <button type="submit">Edit Grade</button>
+    </form>
+
+    <h3>Delete Grade</h3>
+    <form action="/teacher/delete_grade" method="POST">
+        <input type="text" name="student_id" placeholder="Student ID" required>
+        <input type="text" name="subject" placeholder="Subject" required>
+        <input type="number" name="grade_to_delete" placeholder="Grade to Delete" required>
+        <button type="submit">Delete Grade</button>
+    </form>
+
+    <h3>Upload Bulk Grades</h3>
+    <form action="/teacher/upload_bulk_grades" method="POST" enctype="multipart/form-data">
+        <input type="file" name="file" required>
+        <button type="submit">Upload</button>
+    </form>
+
+    <h3>Class Management</h3>
+    <form action="/teacher/add_student" method="POST">
+        <input type="text" name="student_id" placeholder="Student ID" required>
+        <input type="text" name="name" placeholder="Student Name" required>
+        <input type="email" name="email" placeholder="Student Email" required>
+        <input type="text" name="classes" placeholder="Classes" required>
+        <button type="submit">Add Student</button>
+    </form>
+
+    <form action="/teacher/remove_student" method="POST">
+        <input type="text" name="student_id" placeholder="Student ID to Remove" required>
+        <button type="submit">Remove Student</button>
+    </form>
+</body>
+</html>
