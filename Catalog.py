@@ -2,7 +2,10 @@ from flask import Flask, request, jsonify, render_template, redirect, url_for
 
 app = Flask(__name__)
 
-grades = {}  # Dictionary to store grades {student_id: {subject: [grades]}}
+grades = {}
+students = {}
+class_students = {}
+history = {}
 
 
 def validate_grade(grade):
@@ -17,66 +20,86 @@ def home():
 @app.route('/login', methods=['POST'])
 def login():
     email = request.form.get('email')
-
-    if email.endswith('@student.ambmw.ro'):
-        return redirect(url_for('student_menu'))
-    elif email.endswith('@teacher.ambmw.ro'):
-        return redirect(url_for('teacher_menu'))
+    if '@student.ambmw.ro' in email:
+        return redirect(url_for('student_dashboard', student_id=email))
+    elif '@teacher.ambmw.ro' in email:
+        return redirect(url_for('teacher_dashboard'))
     else:
-        return render_template('login.html', error='Invalid email domain. Use a student or teacher email.')
+        return "Invalid email domain. Please use a valid student or teacher email."
 
 
+# Teacher Panel
 @app.route('/teacher')
-def teacher_menu():
-    return render_template('teacher.html')
+def teacher_dashboard():
+    return render_template('teacher.html', grades=grades, students=students)
 
 
-@app.route('/student')
-def student_menu():
-    return render_template('student.html')
-
-
-@app.route('/grades', methods=['POST'])
+@app.route('/teacher/add_grade', methods=['POST'])
 def add_grade():
-    data = request.form
-    student_id = data.get('student_id')
-    subject = data.get('subject')
-    grade = data.get('grade')
+    student_id = request.form.get('student_id')
+    subject = request.form.get('subject')
+    grade = float(request.form.get('grade'))
 
-    try:
-        grade = float(grade)
-        if not validate_grade(grade):
-            return jsonify({'error': 'Invalid grade. Must be between 0 and 100'}), 400
-    except ValueError:
-        return jsonify({'error': 'Grade must be a number'}), 400
+    if not validate_grade(grade):
+        return jsonify({'error': 'Invalid grade. Must be between 0 and 100'}), 400
 
     if student_id not in grades:
         grades[student_id] = {}
     if subject not in grades[student_id]:
         grades[student_id][subject] = []
-
     grades[student_id][subject].append(grade)
-    return render_template('teacher.html', message='Grade added successfully!')
+
+    action = ('add', grade, "timestamp_placeholder")
+    if student_id not in history:
+        history[student_id] = {}
+    if subject not in history[student_id]:
+        history[student_id][subject] = []
+    history[student_id][subject].append(action)
+
+    return redirect(url_for('teacher_dashboard'))
 
 
-@app.route('/grades/<student_id>', methods=['GET'])
-def get_grades(student_id):
-    student_grades = grades.get(student_id, {})
-    return jsonify(student_grades)
+@app.route('/teacher/edit_grade', methods=['POST'])
+def edit_grade():
+    student_id = request.form.get('student_id')
+    subject = request.form.get('subject')
+    old_grade = float(request.form.get('old_grade'))
+    new_grade = float(request.form.get('new_grade'))
+
+    if not validate_grade(new_grade):
+        return jsonify({'error': 'Invalid grade. Must be between 0 and 100'}), 400
+
+    if student_id in grades and subject in grades[student_id]:
+        grades[student_id][subject] = [new_grade if grade == old_grade else grade for grade in
+                                       grades[student_id][subject]]
+
+        action = ('edit', old_grade, new_grade, "timestamp_placeholder")
+        if student_id not in history:
+            history[student_id] = {}
+        if subject not in history[student_id]:
+            history[student_id][subject] = []
+        history[student_id][subject].append(action)
+
+    return redirect(url_for('teacher_dashboard'))
 
 
-@app.route('/grades/<student_id>/average', methods=['GET'])
-def get_average(student_id):
-    student_grades = grades.get(student_id, {})
+@app.route('/teacher/delete_grade', methods=['POST'])
+def delete_grade():
+    student_id = request.form.get('student_id')
+    subject = request.form.get('subject')
+    grade_to_delete = float(request.form.get('grade_to_delete'))
 
-    total, count = 0, 0
-    for subject in student_grades:
-        total += sum(student_grades[subject])
-        count += len(student_grades[subject])
+    if student_id in grades and subject in grades[student_id]:
+        grades[student_id][subject] = [grade for grade in grades[student_id][subject] if grade != grade_to_delete]
 
-    average = total / count if count > 0 else 0
-    return jsonify({'average': average})
+        action = ('delete', grade_to_delete, "timestamp_placeholder")
+        if student_id not in history:
+            history[student_id] = {}
+        if subject not in history[student_id]:
+            history[student_id][subject] = []
+        history[student_id][subject].append(action)
 
+    return redirect(url_for('teacher_dashboard'))
 
 if __name__ == '__main__':
     app.run(debug=True)
