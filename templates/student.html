@@ -48,5 +48,21 @@
     {% else %}
         <p>No grades available.</p>
     {% endif %}
+
+    <hr>
+
+    <h3>📚 Available Courses</h3>
+    {% if courses %}
+        <ul>
+            {% for course in courses %}
+                <li>
+                    <strong>{{ course.course_name }}</strong><br>
+                    {{ course.course_description }}
+                </li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p>No courses available at this time.</p>
+    {% endif %}
 </body>
 </html>
