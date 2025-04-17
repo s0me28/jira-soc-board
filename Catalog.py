@@ -5,7 +5,7 @@ import psycopg2
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:1q2w3e@localhost/Catalog'
 db = SQLAlchemy(app)
-
+#ambmw
 grades = {}
 students = {}
 class_students = {}
