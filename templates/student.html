@@ -9,15 +9,44 @@
     <h2>Welcome, {{ student_id }}</h2>
 
     <h3>Your Grades</h3>
-    <ul>
-        {% for subject, grades in student_grades.items() %}
-            <li><strong>{{ subject }}:</strong>
-                {% for grade in grades %}
-                    {{ grade }}
-                {% endfor %}
-            </li>
-        {% endfor %}
-    </ul>
 
+    {% if student_grades %}
+        <ul>
+            {% for subject, grades in student_grades.items() %}
+                <li>
+                    <h4>{{ subject }}</h4>
+                    <p class="grades"><strong>Grades:</strong>
+                        {% for grade in grades %}
+                            {{ grade }}{% if not loop.last %}, {% endif %}
+                        {% endfor %}
+                    </p>
+                    <p class="average"><strong>Average:</strong>
+                        {{ student_averages[subject] if student_averages[subject] is not none else "N/A" }}
+                    </p>
+
+                    {% if student_history.get(subject) %}
+                        <details>
+                            <summary>📜 Grade History</summary>
+                            <ul>
+                                {% for entry in student_history[subject] %}
+                                    <li>
+                                        {% if entry[0] == 'add' %}
+                                            ➕ Added grade {{ entry[1] }} on {{ entry[2] }}
+                                        {% elif entry[0] == 'edit' %}
+                                            ✏️ Changed grade from {{ entry[1] }} to {{ entry[2] }} on {{ entry[3] }}
+                                        {% elif entry[0] == 'delete' %}
+                                            ❌ Deleted grade {{ entry[1] }} on {{ entry[2] }}
+                                        {% endif %}
+                                    </li>
+                                {% endfor %}
+                            </ul>
+                        </details>
+                    {% endif %}
+                </li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p>No grades available.</p>
+    {% endif %}
 </body>
 </html>
