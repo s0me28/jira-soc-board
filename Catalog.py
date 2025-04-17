@@ -1,6 +1,8 @@
 import os, datetime
 
-from flask import Flask, request, jsonify, render_template, redirect, url_for
+import os, datetime
+
+from flask import Flask, request, jsonify, render_template, redirect, url_for, send_file
 import psycopg2
 
 app = Flask(__name__)
@@ -152,12 +154,10 @@ def backup_table(table_name):
     conn = get_db_connection()
     cur = conn.cursor()
 
-    # Generate filename like: grades_backup_2025-04-18_1530.csv
     timestamp = datetime.now().strftime('%Y-%m-%d_%H%M%S')
     filename = f"{table_name}_backup_{timestamp}.csv"
     filepath = os.path.join("backups", filename)
 
-    # Ensure the backups directory exists
     os.makedirs("backups", exist_ok=True)
 
     try:
