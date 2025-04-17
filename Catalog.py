@@ -176,7 +176,38 @@ def remove_student():
 @app.route('/student/<student_id>')
 def student_dashboard(student_id):
     student_grades = grades.get(student_id, {})
-    return render_template('student.html', student_id=student_id, student_grades=student_grades)
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT subject, action, old_grade, new_grade, timestamp
+        FROM grade_history
+        WHERE student_id = %s
+        ORDER BY timestamp DESC
+    """, (student_id,))
+    history_records = cur.fetchall()
+
+    student_averages = {}
+    for subject, grades_list in student_grades.items():
+        student_averages[subject] = sum(grades_list) / len(grades_list) if grades_list else None
+
+    student_history = {}
+    for subject, action, old_grade, new_grade, timestamp in history_records:
+        if subject not in student_history:
+            student_history[subject] = []
+        if action == 'add':
+            student_history[subject].append(('add', new_grade, timestamp))
+        elif action == 'edit':
+            student_history[subject].append(('edit', old_grade, new_grade, timestamp))
+        elif action == 'delete':
+            student_history[subject].append(('delete', old_grade, timestamp))
+
+    cur.close()
+    conn.close()
+
+    return render_template('student.html', student_id=student_id, student_grades=student_grades, student_averages=student_averages, student_history=student_history)
+
 
 if __name__ == '__main__':
     app.run(debug=True)
