@@ -191,7 +191,7 @@ def student_dashboard(student_id):
     student_averages = {}
     for subject, grades_list in student_grades.items():
         student_averages[subject] = sum(grades_list) / len(grades_list) if grades_list else None
-
+#
     student_history = {}
     for subject, action, old_grade, new_grade, timestamp in history_records:
         if subject not in student_history:
