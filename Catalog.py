@@ -145,6 +145,32 @@ def upload_bulk_grades():
 
     return redirect(url_for('teacher_dashboard'))
 
+@app.route('/backup/<table_name>', methods=['GET'])
+def backup_table(table_name):
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    # Generate filename like: grades_backup_2025-04-18_1530.csv
+    timestamp = datetime.now().strftime('%Y-%m-%d_%H%M%S')
+    filename = f"{table_name}_backup_{timestamp}.csv"
+    filepath = os.path.join("backups", filename)
+
+    # Ensure the backups directory exists
+    os.makedirs("backups", exist_ok=True)
+
+    try:
+        with open(filepath, 'w', encoding='utf-8') as f:
+            cur.copy_expert(f"COPY {table_name} TO STDOUT WITH CSV HEADER", f)
+
+    except Exception as e:
+        cur.close()
+        conn.close()
+        return jsonify({'error': str(e)}), 500
+
+    cur.close()
+    conn.close()
+
+    return send_file(filepath, as_attachment=True)
 @app.route('/teacher/add_student', methods=['POST'])
 def add_student():
     student_id = request.form.get('student_id')
