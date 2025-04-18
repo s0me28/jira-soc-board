@@ -2,7 +2,9 @@ import os
 from datetime import datetime
 from flask import Flask, request, jsonify, render_template, redirect, url_for, send_file
 from werkzeug.security import generate_password_hash, check_password_hash
+from email_validator import validate_email, EmailNotValidError
 import psycopg2
+import csv
 
 app = Flask(__name__)
 
@@ -104,15 +106,17 @@ def delete_grade():
 @app.route('/teacher/upload_bulk_grades', methods=['POST'])
 def upload_bulk_grades():
     file = request.files['file']
-    if file:
-        import csv
-        reader = csv.reader(file)
-        for row in reader:
-            student_id, subject, grade = row
-            grade = float(grade)
-            if validate_grade(grade):
-                grades.setdefault(student_id, {}).setdefault(subject, []).append(grade)
-                history.setdefault(student_id, {}).setdefault(subject, []).append(('add', grade, "timestamp_placeholder"))
+    if file and file.filename.endswith('.csv'):
+        try:
+            reader = csv.reader(file.stream.read().decode("utf-8").splitlines())
+            for row in reader:
+                student_id, subject, grade = row
+                grade = float(grade)
+                if validate_grade(grade):
+                    grades.setdefault(student_id, {}).setdefault(subject, []).append(grade)
+                    history.setdefault(student_id, {}).setdefault(subject, []).append(('add', grade, "timestamp_placeholder"))
+        except Exception:
+            return "Error processing file.", 400
 
     return redirect(url_for('teacher_dashboard'))
 
@@ -130,10 +134,10 @@ def backup_table(table_name):
     try:
         with open(filepath, 'w', encoding='utf-8') as f:
             cur.copy_expert(f"COPY {table_name} TO STDOUT WITH CSV HEADER", f)
-    except Exception as e:
+    except Exception:
         cur.close()
         conn.close()
-        return jsonify({'error': str(e)}), 500
+        return "Failed to backup table.", 500
 
     cur.close()
     conn.close()
@@ -211,6 +215,14 @@ def reset_password():
         email = request.form.get('email')
         new_password = request.form.get('new_password')
 
+        try:
+            validate_email(email)
+        except EmailNotValidError:
+            return "Invalid email format."
+
+        if len(new_password) < 8:
+            return "Password must be at least 8 characters."
+
         hashed_password = generate_password_hash(new_password)
 
         conn = get_db_connection()
@@ -225,7 +237,6 @@ def reset_password():
         return "Password successfully updated. <a href='/'>Return to login</a>"
 
     return render_template('reset_password.html')
-
 
 if __name__ == '__main__':
     app.run(debug=True)
