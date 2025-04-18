@@ -1,5 +1,4 @@
-\import os
-import re
+import os
 import csv
 from datetime import datetime
 from flask import Flask, request, jsonify, render_template, redirect, url_for, send_file
@@ -25,14 +24,13 @@ def get_db_connection():
 def validate_grade(grade):
     return 0 <= grade <= 100
 
-def validate_student_id(student_id):
-    return bool(re.match(r'^[A-Za-z0-9_\-]+$', student_id))
-
-def validate_subject(subject):
-    return subject.strip() != ""
-
-def validate_name(name):
-    return bool(re.match(r'^[A-Za-z\s]+$', name.strip()))
+def is_common_password(password):
+    common_passwords = {
+        '123456', 'password', '123456789', '12345678', '12345',
+        '111111', '1234567', 'sunshine', 'qwerty', 'iloveyou',
+        'admin', 'welcome', 'monkey', 'login', 'abc123'
+    }
+    return password.lower() in common_passwords
 
 @app.route('/')
 def home():
@@ -42,11 +40,6 @@ def home():
 def login():
     email = request.form.get('email')
     password = request.form.get('password')
-
-    try:
-        validate_email(email)
-    except EmailNotValidError:
-        return "Invalid email format."
 
     conn = get_db_connection()
     cur = conn.cursor()
@@ -59,6 +52,7 @@ def login():
         return "User not found."
 
     db_password_hash, role = user
+
     if not check_password_hash(db_password_hash, password):
         return "Incorrect password."
 
@@ -79,11 +73,11 @@ def add_grade():
     subject = request.form.get('subject')
     try:
         grade = float(request.form.get('grade'))
-    except (ValueError, TypeError):
-        return jsonify({'error': 'Invalid grade format'}), 400
+    except ValueError:
+        return jsonify({'error': 'Invalid grade input'}), 400
 
-    if not validate_student_id(student_id) or not validate_subject(subject) or not validate_grade(grade):
-        return jsonify({'error': 'Invalid input'}), 400
+    if not validate_grade(grade):
+        return jsonify({'error': 'Invalid grade. Must be between 0 and 100'}), 400
 
     grades.setdefault(student_id, {}).setdefault(subject, []).append(grade)
     history.setdefault(student_id, {}).setdefault(subject, []).append(('add', grade, "timestamp_placeholder"))
@@ -94,19 +88,18 @@ def add_grade():
 def edit_grade():
     student_id = request.form.get('student_id')
     subject = request.form.get('subject')
+
     try:
         old_grade = float(request.form.get('old_grade'))
         new_grade = float(request.form.get('new_grade'))
-    except (ValueError, TypeError):
-        return jsonify({'error': 'Invalid grade format'}), 400
+    except ValueError:
+        return jsonify({'error': 'Invalid grade input'}), 400
 
-    if not validate_grade(new_grade) or not validate_student_id(student_id) or not validate_subject(subject):
-        return jsonify({'error': 'Invalid input'}), 400
+    if not validate_grade(new_grade):
+        return jsonify({'error': 'Invalid grade. Must be between 0 and 100'}), 400
 
     if student_id in grades and subject in grades[student_id]:
-        grades[student_id][subject] = [
-            new_grade if grade == old_grade else grade for grade in grades[student_id][subject]
-        ]
+        grades[student_id][subject] = [new_grade if grade == old_grade else grade for grade in grades[student_id][subject]]
         history.setdefault(student_id, {}).setdefault(subject, []).append(('edit', old_grade, new_grade, "timestamp_placeholder"))
 
     return redirect(url_for('teacher_dashboard'))
@@ -115,13 +108,11 @@ def edit_grade():
 def delete_grade():
     student_id = request.form.get('student_id')
     subject = request.form.get('subject')
+
     try:
         grade_to_delete = float(request.form.get('grade_to_delete'))
-    except (ValueError, TypeError):
-        return jsonify({'error': 'Invalid grade format'}), 400
-
-    if not validate_student_id(student_id) or not validate_subject(subject):
-        return jsonify({'error': 'Invalid input'}), 400
+    except ValueError:
+        return jsonify({'error': 'Invalid grade input'}), 400
 
     if student_id in grades and subject in grades[student_id]:
         grades[student_id][subject] = [grade for grade in grades[student_id][subject] if grade != grade_to_delete]
@@ -143,7 +134,7 @@ def upload_bulk_grades():
                     grade = float(grade)
                 except ValueError:
                     continue
-                if validate_student_id(student_id) and validate_subject(subject) and validate_grade(grade):
+                if validate_grade(grade):
                     grades.setdefault(student_id, {}).setdefault(subject, []).append(grade)
                     history.setdefault(student_id, {}).setdefault(subject, []).append(('add', grade, "timestamp_placeholder"))
         except Exception:
@@ -159,7 +150,6 @@ def backup_table(table_name):
     timestamp = datetime.now().strftime('%Y-%m-%d_%H%M%S')
     filename = f"{table_name}_backup_{timestamp}.csv"
     filepath = os.path.join("backups", filename)
-
     os.makedirs("backups", exist_ok=True)
 
     try:
@@ -181,13 +171,10 @@ def add_student():
     email = request.form.get('email')
     classes = request.form.getlist('classes')
 
-    if not (validate_student_id(student_id) and validate_name(name)):
-        return "Invalid student data", 400
-
     try:
         validate_email(email)
     except EmailNotValidError:
-        return "Invalid email format.", 400
+        return "Invalid student email."
 
     students[student_id] = {'name': name, 'email': email, 'classes': classes}
     for class_name in classes:
@@ -205,6 +192,7 @@ def remove_student():
             class_students[class_name].remove(student_id)
 
     students.pop(student_id, None)
+
     return redirect(url_for('teacher_dashboard'))
 
 @app.route('/student/<student_id>')
@@ -213,7 +201,6 @@ def student_dashboard(student_id):
 
     conn = get_db_connection()
     cur = conn.cursor()
-
     cur.execute("""
         SELECT subject, action, old_grade, new_grade, timestamp
         FROM grade_history
@@ -258,7 +245,10 @@ def reset_password():
             return "Invalid email format."
 
         if len(new_password) < 8:
-            return "Password must be at least 8 characters."
+            return "Password must be at least 8 characters long."
+
+        if is_common_password(new_password):
+            return "Password is too common. Please choose a more secure password."
 
         hashed_password = generate_password_hash(new_password)
 
