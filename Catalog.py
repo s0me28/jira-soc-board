@@ -1,8 +1,7 @@
-import os, datetime
-
-import os, datetime
-
+import os
+from datetime import datetime
 from flask import Flask, request, jsonify, render_template, redirect, url_for, send_file
+from werkzeug.security import generate_password_hash, check_password_hash
 import psycopg2
 
 app = Flask(__name__)
@@ -44,9 +43,9 @@ def login():
     if user is None:
         return "User not found."
 
-    db_password, role = user
+    db_password_hash, role = user
 
-    if password != db_password:
+    if not check_password_hash(db_password_hash, password):
         return "Incorrect password."
 
     if role == 'student':
@@ -69,18 +68,8 @@ def add_grade():
     if not validate_grade(grade):
         return jsonify({'error': 'Invalid grade. Must be between 0 and 100'}), 400
 
-    if student_id not in grades:
-        grades[student_id] = {}
-    if subject not in grades[student_id]:
-        grades[student_id][subject] = []
-    grades[student_id][subject].append(grade)
-
-    action = ('add', grade, "timestamp_placeholder")
-    if student_id not in history:
-        history[student_id] = {}
-    if subject not in history[student_id]:
-        history[student_id][subject] = []
-    history[student_id][subject].append(action)
+    grades.setdefault(student_id, {}).setdefault(subject, []).append(grade)
+    history.setdefault(student_id, {}).setdefault(subject, []).append(('add', grade, "timestamp_placeholder"))
 
     return redirect(url_for('teacher_dashboard'))
 
@@ -96,13 +85,7 @@ def edit_grade():
 
     if student_id in grades and subject in grades[student_id]:
         grades[student_id][subject] = [new_grade if grade == old_grade else grade for grade in grades[student_id][subject]]
-
-        action = ('edit', old_grade, new_grade, "timestamp_placeholder")
-        if student_id not in history:
-            history[student_id] = {}
-        if subject not in history[student_id]:
-            history[student_id][subject] = []
-        history[student_id][subject].append(action)
+        history.setdefault(student_id, {}).setdefault(subject, []).append(('edit', old_grade, new_grade, "timestamp_placeholder"))
 
     return redirect(url_for('teacher_dashboard'))
 
@@ -114,13 +97,7 @@ def delete_grade():
 
     if student_id in grades and subject in grades[student_id]:
         grades[student_id][subject] = [grade for grade in grades[student_id][subject] if grade != grade_to_delete]
-
-        action = ('delete', grade_to_delete, "timestamp_placeholder")
-        if student_id not in history:
-            history[student_id] = {}
-        if subject not in history[student_id]:
-            history[student_id][subject] = []
-        history[student_id][subject].append(action)
+        history.setdefault(student_id, {}).setdefault(subject, []).append(('delete', grade_to_delete, "timestamp_placeholder"))
 
     return redirect(url_for('teacher_dashboard'))
 
@@ -134,18 +111,8 @@ def upload_bulk_grades():
             student_id, subject, grade = row
             grade = float(grade)
             if validate_grade(grade):
-                if student_id not in grades:
-                    grades[student_id] = {}
-                if subject not in grades[student_id]:
-                    grades[student_id][subject] = []
-                grades[student_id][subject].append(grade)
-
-                action = ('add', grade, "timestamp_placeholder")
-                if student_id not in history:
-                    history[student_id] = {}
-                if subject not in history[student_id]:
-                    history[student_id][subject] = []
-                history[student_id][subject].append(action)
+                grades.setdefault(student_id, {}).setdefault(subject, []).append(grade)
+                history.setdefault(student_id, {}).setdefault(subject, []).append(('add', grade, "timestamp_placeholder"))
 
     return redirect(url_for('teacher_dashboard'))
 
@@ -163,7 +130,6 @@ def backup_table(table_name):
     try:
         with open(filepath, 'w', encoding='utf-8') as f:
             cur.copy_expert(f"COPY {table_name} TO STDOUT WITH CSV HEADER", f)
-
     except Exception as e:
         cur.close()
         conn.close()
@@ -171,8 +137,8 @@ def backup_table(table_name):
 
     cur.close()
     conn.close()
-
     return send_file(filepath, as_attachment=True)
+
 @app.route('/teacher/add_student', methods=['POST'])
 def add_student():
     student_id = request.form.get('student_id')
@@ -182,9 +148,7 @@ def add_student():
 
     students[student_id] = {'name': name, 'email': email, 'classes': classes}
     for class_name in classes:
-        if class_name not in class_students:
-            class_students[class_name] = []
-        class_students[class_name].append(student_id)
+        class_students.setdefault(class_name, []).append(student_id)
 
     return redirect(url_for('teacher_dashboard'))
 
@@ -216,14 +180,14 @@ def student_dashboard(student_id):
     """, (student_id,))
     history_records = cur.fetchall()
 
-    student_averages = {}
-    for subject, grades_list in student_grades.items():
-        student_averages[subject] = sum(grades_list) / len(grades_list) if grades_list else None
-#
+    student_averages = {
+        subject: (sum(grades_list) / len(grades_list)) if grades_list else None
+        for subject, grades_list in student_grades.items()
+    }
+
     student_history = {}
     for subject, action, old_grade, new_grade, timestamp in history_records:
-        if subject not in student_history:
-            student_history[subject] = []
+        student_history.setdefault(subject, [])
         if action == 'add':
             student_history[subject].append(('add', new_grade, timestamp))
         elif action == 'edit':
@@ -234,8 +198,12 @@ def student_dashboard(student_id):
     cur.close()
     conn.close()
 
-    return render_template('student.html', student_id=student_id, student_grades=student_grades, student_averages=student_averages, student_history=student_history)
-
+    return render_template('student.html',
+        student_id=student_id,
+        student_grades=student_grades,
+        student_averages=student_averages,
+        student_history=student_history
+    )
 
 if __name__ == '__main__':
     app.run(debug=True)
