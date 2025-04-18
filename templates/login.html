@@ -2,12 +2,68 @@
 <html>
 <head>
     <title>Login</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            height: 100vh;
+            align-items: center;
+            justify-content: center;
+            background-color: #f0f2f5;
+        }
+        .login-container {
+            background-color: white;
+            padding: 30px 40px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        h2 {
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        input {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+        }
+        button {
+            width: 100%;
+            padding: 10px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .reset-link {
+            text-align: center;
+            margin-top: 15px;
+        }
+        .reset-link a {
+            color: #007bff;
+            text-decoration: none;
+        }
+        .reset-link a:hover {
+            text-decoration: underline;
+        }
+    </style>
 </head>
 <body>
-    <form method="POST" action="/login">
-        <input type="text" name="email" placeholder="Email" required />
-        <input type="password" name="password" placeholder="Password" required />
-        <button type="submit">Login</button>
-    </form>
+    <div class="login-container">
+        <h2>Login</h2>
+        <form method="POST" action="/login">
+            <input type="text" name="email" placeholder="Email" required />
+            <input type="password" name="password" placeholder="Password" required />
+            <button type="submit">Login</button>
+        </form>
+        <div class="reset-link">
+            <p>Forgot your password? <a href="{{ url_for('reset_password') }}">Reset it here</a></p>
+        </div>
+    </div>
 </body>
 </html>

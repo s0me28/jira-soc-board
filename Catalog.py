@@ -205,5 +205,27 @@ def student_dashboard(student_id):
         student_history=student_history
     )
 
+@app.route('/reset_password', methods=['GET', 'POST'])
+def reset_password():
+    if request.method == 'POST':
+        email = request.form.get('email')
+        new_password = request.form.get('new_password')
+
+        hashed_password = generate_password_hash(new_password)
+
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        cur.execute("UPDATE users SET password = %s WHERE username = %s", (hashed_password, email))
+        conn.commit()
+
+        cur.close()
+        conn.close()
+
+        return "Password successfully updated. <a href='/'>Return to login</a>"
+
+    return render_template('reset_password.html')
+
+
 if __name__ == '__main__':
     app.run(debug=True)
