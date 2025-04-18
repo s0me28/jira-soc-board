@@ -1,10 +1,11 @@
-import os
+\import os
+import re
+import csv
 from datetime import datetime
 from flask import Flask, request, jsonify, render_template, redirect, url_for, send_file
 from werkzeug.security import generate_password_hash, check_password_hash
 from email_validator import validate_email, EmailNotValidError
 import psycopg2
-import csv
 
 app = Flask(__name__)
 
@@ -24,6 +25,15 @@ def get_db_connection():
 def validate_grade(grade):
     return 0 <= grade <= 100
 
+def validate_student_id(student_id):
+    return bool(re.match(r'^[A-Za-z0-9_\-]+$', student_id))
+
+def validate_subject(subject):
+    return subject.strip() != ""
+
+def validate_name(name):
+    return bool(re.match(r'^[A-Za-z\s]+$', name.strip()))
+
 @app.route('/')
 def home():
     return render_template('login.html')
@@ -33,12 +43,15 @@ def login():
     email = request.form.get('email')
     password = request.form.get('password')
 
+    try:
+        validate_email(email)
+    except EmailNotValidError:
+        return "Invalid email format."
+
     conn = get_db_connection()
     cur = conn.cursor()
-
     cur.execute("SELECT password, role FROM users WHERE username = %s", (email,))
     user = cur.fetchone()
-
     cur.close()
     conn.close()
 
@@ -46,7 +59,6 @@ def login():
         return "User not found."
 
     db_password_hash, role = user
-
     if not check_password_hash(db_password_hash, password):
         return "Incorrect password."
 
@@ -65,10 +77,13 @@ def teacher_dashboard():
 def add_grade():
     student_id = request.form.get('student_id')
     subject = request.form.get('subject')
-    grade = float(request.form.get('grade'))
+    try:
+        grade = float(request.form.get('grade'))
+    except (ValueError, TypeError):
+        return jsonify({'error': 'Invalid grade format'}), 400
 
-    if not validate_grade(grade):
-        return jsonify({'error': 'Invalid grade. Must be between 0 and 100'}), 400
+    if not validate_student_id(student_id) or not validate_subject(subject) or not validate_grade(grade):
+        return jsonify({'error': 'Invalid input'}), 400
 
     grades.setdefault(student_id, {}).setdefault(subject, []).append(grade)
     history.setdefault(student_id, {}).setdefault(subject, []).append(('add', grade, "timestamp_placeholder"))
@@ -79,14 +94,19 @@ def add_grade():
 def edit_grade():
     student_id = request.form.get('student_id')
     subject = request.form.get('subject')
-    old_grade = float(request.form.get('old_grade'))
-    new_grade = float(request.form.get('new_grade'))
+    try:
+        old_grade = float(request.form.get('old_grade'))
+        new_grade = float(request.form.get('new_grade'))
+    except (ValueError, TypeError):
+        return jsonify({'error': 'Invalid grade format'}), 400
 
-    if not validate_grade(new_grade):
-        return jsonify({'error': 'Invalid grade. Must be between 0 and 100'}), 400
+    if not validate_grade(new_grade) or not validate_student_id(student_id) or not validate_subject(subject):
+        return jsonify({'error': 'Invalid input'}), 400
 
     if student_id in grades and subject in grades[student_id]:
-        grades[student_id][subject] = [new_grade if grade == old_grade else grade for grade in grades[student_id][subject]]
+        grades[student_id][subject] = [
+            new_grade if grade == old_grade else grade for grade in grades[student_id][subject]
+        ]
         history.setdefault(student_id, {}).setdefault(subject, []).append(('edit', old_grade, new_grade, "timestamp_placeholder"))
 
     return redirect(url_for('teacher_dashboard'))
@@ -95,7 +115,13 @@ def edit_grade():
 def delete_grade():
     student_id = request.form.get('student_id')
     subject = request.form.get('subject')
-    grade_to_delete = float(request.form.get('grade_to_delete'))
+    try:
+        grade_to_delete = float(request.form.get('grade_to_delete'))
+    except (ValueError, TypeError):
+        return jsonify({'error': 'Invalid grade format'}), 400
+
+    if not validate_student_id(student_id) or not validate_subject(subject):
+        return jsonify({'error': 'Invalid input'}), 400
 
     if student_id in grades and subject in grades[student_id]:
         grades[student_id][subject] = [grade for grade in grades[student_id][subject] if grade != grade_to_delete]
@@ -110,9 +136,14 @@ def upload_bulk_grades():
         try:
             reader = csv.reader(file.stream.read().decode("utf-8").splitlines())
             for row in reader:
+                if len(row) != 3:
+                    continue
                 student_id, subject, grade = row
-                grade = float(grade)
-                if validate_grade(grade):
+                try:
+                    grade = float(grade)
+                except ValueError:
+                    continue
+                if validate_student_id(student_id) and validate_subject(subject) and validate_grade(grade):
                     grades.setdefault(student_id, {}).setdefault(subject, []).append(grade)
                     history.setdefault(student_id, {}).setdefault(subject, []).append(('add', grade, "timestamp_placeholder"))
         except Exception:
@@ -150,6 +181,14 @@ def add_student():
     email = request.form.get('email')
     classes = request.form.getlist('classes')
 
+    if not (validate_student_id(student_id) and validate_name(name)):
+        return "Invalid student data", 400
+
+    try:
+        validate_email(email)
+    except EmailNotValidError:
+        return "Invalid email format.", 400
+
     students[student_id] = {'name': name, 'email': email, 'classes': classes}
     for class_name in classes:
         class_students.setdefault(class_name, []).append(student_id)
@@ -166,7 +205,6 @@ def remove_student():
             class_students[class_name].remove(student_id)
 
     students.pop(student_id, None)
-
     return redirect(url_for('teacher_dashboard'))
 
 @app.route('/student/<student_id>')
@@ -183,6 +221,8 @@ def student_dashboard(student_id):
         ORDER BY timestamp DESC
     """, (student_id,))
     history_records = cur.fetchall()
+    cur.close()
+    conn.close()
 
     student_averages = {
         subject: (sum(grades_list) / len(grades_list)) if grades_list else None
@@ -198,9 +238,6 @@ def student_dashboard(student_id):
             student_history[subject].append(('edit', old_grade, new_grade, timestamp))
         elif action == 'delete':
             student_history[subject].append(('delete', old_grade, timestamp))
-
-    cur.close()
-    conn.close()
 
     return render_template('student.html',
         student_id=student_id,
@@ -227,10 +264,8 @@ def reset_password():
 
         conn = get_db_connection()
         cur = conn.cursor()
-
         cur.execute("UPDATE users SET password = %s WHERE username = %s", (hashed_password, email))
         conn.commit()
-
         cur.close()
         conn.close()
 
